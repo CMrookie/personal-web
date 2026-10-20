@@ -1,0 +1,57 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时间只跑一个发布，避免并发写坏 Pages
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 静态生成
+        run: npm run generate
+        env:
+          # 项目站点的路径前缀：https://<owner>.github.io/<repo>/
+          # 如果仓库改名为 <owner>.github.io，这里要改成 /
+          NUXT_APP_BASE_URL: /${{ github.event.repository.name }}/
+          # 域名一律小写（GitHub 的 owner 保留原始大小写，不要直接拼进去）
+          NUXT_PUBLIC_SITE_URL: https://cmrookie.github.io/${{ github.event.repository.name }}/
+          # 1 = 允许搜索引擎收录（默认不收录，页面上有手机号和邮箱）
+          SITE_INDEXABLE: '0'
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .output/public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
